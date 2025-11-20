@@ -1,5 +1,8 @@
 // On Windows platform, don't show a console when opening the app.
-// #![windows_subsystem = "windows"]
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
 
 use sqlx::{FromRow, SqlitePool};
 use tokio::sync::mpsc::UnboundedSender;
@@ -12,6 +15,7 @@ use xilem::view::{
 use xilem::winit::error::EventLoopError;
 use xilem::{EventLoop, EventLoopBuilder, InsertNewline, WidgetView, WindowOptions, Xilem};
 
+#[derive(Default)]
 struct AppState {
     db_sender: Option<UnboundedSender<DbRequest>>,
     task_list: TaskList,
@@ -22,6 +26,8 @@ enum DbRequest {
     FetchAllTodos,
     FetchTodo(i64),
     AddTodo(String, bool),
+    RemoveTodo(i64),
+    UpdateTodoDone(i64, bool),
 }
 
 #[derive(Debug)]
@@ -29,6 +35,7 @@ enum DbMessage {
     AllTodosFetched(Vec<Task>),
     TodoFetched(Task),
     TodoAdded(i64),
+    TodoRemoved(i64),
 }
 
 #[derive(FromRow, Clone, Debug)]
@@ -46,6 +53,7 @@ enum Filter {
     Completed,
 }
 
+#[derive(Clone)]
 enum TaskStatus {
     Pending(i64),
     Available(Task),
@@ -69,7 +77,7 @@ impl TaskList {
         }
     }
 
-    fn add_task(&mut self, sender: Option<&UnboundedSender<DbRequest>>) {
+    fn add_request(&mut self, sender: Option<&UnboundedSender<DbRequest>>) {
         if let Some(sender) = sender {
             if !self.next_task.is_empty() {
                 sender
@@ -89,14 +97,52 @@ impl TaskList {
         }
     }
 
-    fn update_pending(&mut self, id: i64, new_task: Task) {
-        if let Some(task) = self.tasks.iter_mut().find(|task| {
-            if let TaskStatus::Pending(pending_id) = task {
+    fn update_to_available(&mut self, id: i64, new_task: Task) {
+        if let Some(task) = self.tasks.iter_mut().find(|task_status| {
+            if let TaskStatus::Pending(pending_id) = task_status {
                 return id == *pending_id;
             };
             false
         }) {
             *task = TaskStatus::Available(new_task);
+        }
+    }
+
+    fn remove_request(&mut self, index: usize, sender: Option<&UnboundedSender<DbRequest>>) {
+        if let Some(sender) = sender {
+            if let Some(TaskStatus::Available(task)) = self.tasks.get(index) {
+                sender.send(DbRequest::RemoveTodo(task.id)).unwrap();
+            }
+        }
+    }
+
+    fn remove_task(&mut self, id: i64) {
+        self.tasks = self
+            .tasks
+            .clone()
+            .into_iter()
+            .filter(|task_status| {
+                if let TaskStatus::Available(task) = task_status {
+                    return task.id != id;
+                };
+                true
+            })
+            .collect();
+    }
+
+    fn update_done(
+        &mut self,
+        index: usize,
+        done: bool,
+        sender: Option<&UnboundedSender<DbRequest>>,
+    ) {
+        if let Some(sender) = sender {
+            if let Some(TaskStatus::Available(task)) = self.tasks.get_mut(index) {
+                task.done = done;
+                sender
+                    .send(DbRequest::UpdateTodoDone(task.id, done))
+                    .unwrap();
+            }
         }
     }
 }
@@ -111,13 +157,13 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     .placeholder("What needs to be done?")
     .insert_newline(InsertNewline::OnShiftEnter)
     .on_enter(|state: &mut AppState, _| {
-        state.task_list.add_task(state.db_sender.as_ref());
+        state.task_list.add_request(state.db_sender.as_ref());
     });
 
     let first_line = flex_col((
         input_box,
         text_button("Add task".to_string(), |state: &mut AppState| {
-            state.task_list.add_task(state.db_sender.as_ref());
+            state.task_list.add_request(state.db_sender.as_ref());
         }),
     ));
 
@@ -140,15 +186,13 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                         task.description.clone(),
                         task.done,
                         move |state: &mut AppState, checked| {
-                            if let Some(TaskStatus::Available(task)) =
-                                state.task_list.tasks.get_mut(i)
-                            {
-                                task.done = checked;
-                            }
+                            state
+                                .task_list
+                                .update_done(i, checked, state.db_sender.as_ref());
                         },
                     );
                     let delete_button = text_button("Delete", move |state: &mut AppState| {
-                        state.task_list.tasks.remove(i);
+                        state.task_list.remove_request(i, state.db_sender.as_ref());
                     });
                     Some(Either::B(flex_row((checkbox, delete_button))))
                 }
@@ -216,6 +260,26 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                                     }
                                 }
                             }
+                            DbRequest::RemoveTodo(id) => {
+                                let result = remove_todo(&pool, id).await;
+                                match result {
+                                    Ok(id) => drop(proxy.message(DbMessage::TodoRemoved(id))),
+                                    Err(err) => {
+                                        println!("Removing todo in database failed: {err:?}");
+                                    }
+                                }
+                            }
+                            DbRequest::UpdateTodoDone(id, done) => {
+                                let result = update_todo_done(&pool, id, done).await;
+                                match result {
+                                    Ok(_) => (),
+                                    Err(err) => {
+                                        println!(
+                                            "Updating todo done status in database failed: {err:?}"
+                                        );
+                                    }
+                                }
+                            }
                         }
                     });
                 }
@@ -223,7 +287,7 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             |state: &mut AppState, sender| {
                 state.db_sender = Some(sender);
                 if let Some(sender) = &state.db_sender {
-                    sender.send(DbRequest::FetchAllTodos);
+                    sender.send(DbRequest::FetchAllTodos).unwrap();
                 }
             },
             |state: &mut AppState, msg: DbMessage| match msg {
@@ -231,10 +295,13 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     state.task_list = TaskList::new(tasks);
                 }
                 DbMessage::TodoFetched(task) => {
-                    state.task_list.update_pending(task.id, task);
+                    state.task_list.update_to_available(task.id, task);
                 }
                 DbMessage::TodoAdded(id) => {
                     state.task_list.add_pending(id, state.db_sender.as_ref());
+                }
+                DbMessage::TodoRemoved(id) => {
+                    state.task_list.remove_task(id);
                 }
             },
         ),
@@ -258,23 +325,34 @@ async fn fetch_todo(pool: &SqlitePool, id: i64) -> anyhow::Result<Task> {
 }
 
 async fn add_todo(pool: &SqlitePool, desc: String, done: bool) -> anyhow::Result<i64> {
-    let mut conn = pool.acquire().await?;
     let id = sqlx::query("INSERT INTO todos (description, done) VALUES (?, ?)")
         .bind(desc)
         .bind(done)
-        .execute(&mut *conn)
+        .execute(pool)
         .await?
         .last_insert_rowid();
     Ok(id)
 }
 
-fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
-    let data = AppState {
-        db_sender: None,
-        task_list: TaskList::default(),
-    };
+async fn remove_todo(pool: &SqlitePool, id: i64) -> anyhow::Result<i64> {
+    sqlx::query("DELETE FROM todos WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(id)
+}
 
-    let app = Xilem::new_simple(data, app_logic, WindowOptions::new("Todos"));
+async fn update_todo_done(pool: &SqlitePool, id: i64, done: bool) -> anyhow::Result<()> {
+    sqlx::query("UPDATE todos SET done = ? WHERE id = ?")
+        .bind(done)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let app = Xilem::new_simple(AppState::default(), app_logic, WindowOptions::new("Todos"));
     app.run_in(event_loop)
 }
 
