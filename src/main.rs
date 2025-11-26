@@ -10,7 +10,7 @@ use xilem::core::{fork, one_of::Either};
 use xilem::masonry::properties::types::AsUnit;
 use xilem::style::Style as _;
 use xilem::view::{
-    checkbox, flex_col, flex_row, sized_box, spinner, text_button, text_input, worker,
+    checkbox, flex_col, flex_row, portal, sized_box, spinner, text_button, text_input, worker,
 };
 use xilem::winit::error::EventLoopError;
 use xilem::{EventLoop, EventLoopBuilder, InsertNewline, WidgetView, WindowOptions, Xilem};
@@ -217,8 +217,10 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         ))
     });
 
+    let content = flex_col((first_line, tasks, footer)).padding(50.0);
+
     fork(
-        flex_col((first_line, tasks, footer)).padding(50.0),
+        portal(content),
         worker(
             |proxy, mut rx| async move {
                 let database_url = "sqlite://db/Todos.db";
