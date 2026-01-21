@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
-# tracing = "0.1"
-tokio = "1.48"
-xilem = "0.4"
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-native-tls", "sqlite"] }
+thiserror = "2.0"
+tokio = "1.49"
+xilem = { git = "https://github.com/linebender/xilem" }

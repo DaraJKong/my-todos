@@ -1,0 +1,7 @@
+[formatting]
+# Aligning comments with the largest line creates
+# diff noise when neighboring lines are changed.
+align_comments = false
+
+column_width = 100
+indent_string = "    "

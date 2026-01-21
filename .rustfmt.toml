@@ -1,0 +1,9 @@
+unstable_features = true
+
+newline_style = "Unix"
+use_field_init_shorthand = true
+single_line_let_else_max_width = 0
+
+# Unstable features
+imports_granularity = "Module"
+group_imports = "StdExternalCrate"
