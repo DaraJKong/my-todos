@@ -2,5 +2,5 @@
 rustdocflags=["--default-theme=ayu"]
 
 [alias]
-rwin = "cargo run --release --target-dir D:\\CACHE\\todos\\target"
-rlnx = "cargo run --release --target-dir /media/darak/DARA_KONG/CACHE/todos"
+rwin = "cargo run --release --target-dir D:\\CACHE\\todos\\target --target x86_64-pc-windows-gnu"
+rlnx = "cargo run --release --target-dir /media/darak/DARA_KONG/CACHE/todos --target x86_64-unknown-linux-gnu"
