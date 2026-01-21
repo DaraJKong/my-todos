@@ -41,9 +41,9 @@ impl Form for CreateTaskForm {
             },
         )
         .placeholder("What needs to be done?");
-        let add_button = text_button("Add task", |_| Submit::Yes).width(Dim::Stretch);
+        let add_button = text_button("Add task", |_| Submit::Yes);
         let error = self.error_view();
-        flex_col((description, add_button, error))
+        flex_col((flex_row((description.flex(1.), add_button)), error))
             .padding(25.)
             .corner_radius(15.)
             .background_color(SURFACE_COLOR)
@@ -81,16 +81,18 @@ impl Form for UpdateTaskForm {
                 state.done = checked;
                 Submit::No
             },
-        )
-        .flex(1.);
+        );
         let ok_button = button(label("Ok").color(SUCCESS_COLOR), |_| Submit::Yes);
         let cancel_button = text_button("Cancel", |_| Submit::Cancel);
         let error = self.error_view();
-        flex_row((checkbox, ok_button, cancel_button, error))
-            .padding(5.)
-            .corner_radius(10.)
-            .background_color(SURFACE_COLOR)
-            .border(SURFACE_BORDER_COLOR, 1.)
+        flex_col((
+            flex_row((checkbox.flex(1.), ok_button, cancel_button)),
+            error,
+        ))
+        .padding(5.)
+        .corner_radius(10.)
+        .background_color(SURFACE_COLOR)
+        .border(SURFACE_BORDER_COLOR, 1.)
     }
 
     fn validate(&mut self) -> Result<bool, TaskError> {
