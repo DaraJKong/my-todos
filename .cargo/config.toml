@@ -1,2 +1,6 @@
 [build]
 rustdocflags=["--default-theme=ayu"]
+
+[alias]
+rwin = "cargo run --release --target-dir D:\\CACHE\\todos\\target"
+rlnx = "cargo run --release --target-dir /media/darak/DARA_KONG/CACHE/todos"
