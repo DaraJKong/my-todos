@@ -8,7 +8,7 @@ use xilem::view::{
 };
 
 use crate::Task;
-use crate::database::{create_task, delete_task, get_tasks, update_task_done};
+use crate::database::{create_task, delete_task, get_tasks, update_task};
 use crate::ui::component::Form;
 use crate::ui::component::form::Submit;
 use crate::ui::component::list::{ItemAction, ListFilter, ListItem, ListStorage};
@@ -68,7 +68,7 @@ pub struct UpdateTaskForm {
 }
 
 impl Form for UpdateTaskForm {
-    type Output = bool;
+    type Output = (String, bool);
     type Error = TaskError;
 
     fn last_error(&mut self) -> &mut Option<TaskError> {
@@ -76,19 +76,16 @@ impl Form for UpdateTaskForm {
     }
 
     fn view(&mut self) -> impl WidgetView<Edit<Self>, Submit> + use<> {
-        let checkbox = checkbox(
-            self.description.clone(),
-            self.done,
-            |state: &mut UpdateTaskForm, checked| {
-                state.done = checked;
-                Submit::No
-            },
-        );
+        let description = text_input(self.description.clone(), |state: &mut Self, input| {
+            state.description = input;
+            Submit::No
+        })
+        .on_enter(|_, _| Submit::Yes);
         let ok_button = button(label("Ok").color(SUCCESS_COLOR), |_| Submit::Yes);
         let cancel_button = text_button("Cancel", |_| Submit::Cancel);
         let error = self.error_view();
         flex_col((
-            flex_row((checkbox.flex(1.), ok_button, cancel_button)),
+            flex_row((description.flex(1.), ok_button, cancel_button)),
             error,
         ))
         .padding(5.)
@@ -97,8 +94,14 @@ impl Form for UpdateTaskForm {
         .border(SURFACE_BORDER_COLOR, 1.)
     }
 
-    fn validate(&mut self) -> Result<bool, TaskError> {
-        Ok(std::mem::take(&mut self.done))
+    fn validate(&mut self) -> Result<(String, bool), TaskError> {
+        if self.description.is_empty() {
+            return Err(TaskError::EmptyDescription);
+        }
+        Ok((
+            std::mem::take(&mut self.description),
+            std::mem::take(&mut self.done),
+        ))
     }
 }
 
@@ -169,8 +172,8 @@ impl ListStorage for TaskStorage {
     }
 
     #[inline(always)]
-    async fn update(id: i64, done: bool) -> anyhow::Result<Task> {
-        update_task_done(id, done).await
+    async fn update(id: i64, (desc, done): (String, bool)) -> anyhow::Result<Task> {
+        update_task(id, desc, done).await
     }
 
     #[inline(always)]
@@ -190,12 +193,14 @@ impl ListItem for Task {
     }
 
     fn view(&self) -> impl WidgetView<Read<Self>, ItemAction<Self>> + use<> {
-        let checkbox = checkbox(self.description.clone(), self.done, |_, checked| {
-            ItemAction::Update(checked)
-        })
-        .flex(1.);
+        let checkbox = checkbox(
+            self.description.clone(),
+            self.done,
+            |state: &Self, checked| ItemAction::Update((state.description.clone(), checked)),
+        );
+        let edit_button = button(label("Edit").color(SUCCESS_COLOR), |_| ItemAction::Edit);
         let delete_button = button(label("Delete").color(DANGER_COLOR), |_| ItemAction::Delete);
-        flex_row((checkbox, delete_button))
+        flex_row((checkbox.flex(1.), edit_button, delete_button))
             .padding(5.)
             .corner_radius(10.)
             .background_color(SURFACE_COLOR)

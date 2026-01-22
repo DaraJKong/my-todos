@@ -49,10 +49,11 @@ pub async fn create_task(desc: String) -> anyhow::Result<Task> {
     get_task(id).await
 }
 
-pub async fn update_task_done(id: i64, done: bool) -> anyhow::Result<Task> {
+pub async fn update_task(id: i64, desc: String, done: bool) -> anyhow::Result<Task> {
     let pool = &*DB;
 
-    sqlx::query("UPDATE todos SET done = ? WHERE id = ?")
+    sqlx::query("UPDATE todos SET description = ?, done = ? WHERE id = ?")
+        .bind(desc)
         .bind(done)
         .bind(id)
         .execute(pool)
