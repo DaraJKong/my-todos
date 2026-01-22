@@ -2,7 +2,7 @@ pub mod task_item;
 
 use xilem::WidgetView;
 use xilem::core::one_of::Either;
-use xilem::core::{Edit, MessageProxy, fork, lens, map_action, map_state};
+use xilem::core::{Edit, Read, MessageProxy, fork, lens, map_action, map_state};
 use xilem::masonry::layout::Dim;
 use xilem::style::Style;
 use xilem::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -42,12 +42,13 @@ where
     type UpdateForm: Form<Output: Send> + From<Self>;
 
     fn id(&self) -> Self::Id;
-    fn view(&mut self) -> impl WidgetView<Edit<Self>, ItemAction> + use<Self>;
+    fn view(&self) -> impl WidgetView<Read<Self>, ItemAction<Self>> + use<Self>;
 }
 
-pub enum ItemAction {
+pub enum ItemAction<T> where T: ListItem {
     None,
     Edit,
+    Update(<T::UpdateForm as Form>::Output),
     Delete,
 }
 
@@ -89,10 +90,11 @@ where
     storage: S,
 }
 
-impl ItemAction {
-    fn handle<T, S>(self, state: &mut AsyncList<T, S>, index: usize)
+impl<T> ItemAction<T>
     where
-        T: ListItem,
+        T: ListItem {
+    fn handle<S>(self, state: &mut AsyncList<T, S>, index: usize)
+    where
         S: ListStorage<Item = T>,
     {
         let item = state.items.get(index);
@@ -100,6 +102,9 @@ impl ItemAction {
             (ItemAction::Edit, Some(item)) => {
                 state.update_form = T::UpdateForm::from(item.clone());
                 state.editing = Some(index);
+            }
+            (ItemAction::Update(update_output), Some(item)) => {
+                state.sender_send(ListRequest::Update(item.id(), update_output));
             }
             (ItemAction::Delete, Some(item)) => {
                 state.sender_send(ListRequest::Delete(item.id()));
@@ -270,7 +275,7 @@ where
         } else {
             Either::B(map_action(
                 lens(T::view, move |state: &mut Self, ()| {
-                    state.items.get_mut(index).unwrap()
+                    state.items.get(index).unwrap()
                 }),
                 move |state: &mut Self, action| {
                     action.handle(state, index);

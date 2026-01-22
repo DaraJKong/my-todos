@@ -1,7 +1,6 @@
 use thiserror::Error;
 use xilem::WidgetView;
-use xilem::core::Edit;
-use xilem::masonry::layout::Dim;
+use xilem::core::{Edit, Read};
 use xilem::style::Style;
 use xilem::view::{FlexExt, button, checkbox, flex_col, flex_row, label, text_button, text_input};
 
@@ -153,12 +152,11 @@ impl ListItem for Task {
         self.id
     }
 
-    fn view(&mut self) -> impl WidgetView<Edit<Self>, ItemAction> + use<> {
+    fn view(&self) -> impl WidgetView<Read<Self>, ItemAction<Self>> + use<> {
         let checkbox =
-            checkbox(self.description.clone(), self.done, |_, _| ItemAction::None).flex(1.);
-        let edit_button = text_button("Edit", |_| ItemAction::Edit);
+            checkbox(self.description.clone(), self.done, |_, checked| ItemAction::Update(checked)).flex(1.);
         let delete_button = button(label("Delete").color(DANGER_COLOR), |_| ItemAction::Delete);
-        flex_row((checkbox, edit_button, delete_button))
+        flex_row((checkbox, delete_button))
             .padding(5.)
             .corner_radius(10.)
             .background_color(SURFACE_COLOR)
