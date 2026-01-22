@@ -153,8 +153,10 @@ impl ListItem for Task {
     }
 
     fn view(&self) -> impl WidgetView<Read<Self>, ItemAction<Self>> + use<> {
-        let checkbox =
-            checkbox(self.description.clone(), self.done, |_, checked| ItemAction::Update(checked)).flex(1.);
+        let checkbox = checkbox(self.description.clone(), self.done, |_, checked| {
+            ItemAction::Update(checked)
+        })
+        .flex(1.);
         let delete_button = button(label("Delete").color(DANGER_COLOR), |_| ItemAction::Delete);
         flex_row((checkbox, delete_button))
             .padding(5.)

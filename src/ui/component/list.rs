@@ -2,7 +2,7 @@ pub mod task_item;
 
 use xilem::WidgetView;
 use xilem::core::one_of::Either;
-use xilem::core::{Edit, Read, MessageProxy, fork, lens, map_action, map_state};
+use xilem::core::{Edit, MessageProxy, Read, fork, lens, map_action, map_state};
 use xilem::masonry::layout::Dim;
 use xilem::style::Style;
 use xilem::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -37,7 +37,8 @@ pub trait ListItem
 where
     Self: Sized + Clone + std::fmt::Debug + Send + 'static,
 {
-    type Id: PartialEq + Copy + std::fmt::Debug + Send;
+    /// Type `Id` should be a unique identifier.
+    type Id: PartialEq + Copy + std::fmt::Debug + Send + Sync;
     type CreateForm: Form<Output: Send>;
     type UpdateForm: Form<Output: Send> + From<Self>;
 
@@ -45,7 +46,10 @@ where
     fn view(&self) -> impl WidgetView<Read<Self>, ItemAction<Self>> + use<Self>;
 }
 
-pub enum ItemAction<T> where T: ListItem {
+pub enum ItemAction<T>
+where
+    T: ListItem,
+{
     None,
     Edit,
     Update(<T::UpdateForm as Form>::Output),
@@ -83,7 +87,7 @@ where
 {
     create_form: T::CreateForm,
     update_form: T::UpdateForm,
-    editing: Option<usize>,
+    editing: Option<T::Id>,
     items: Vec<T>,
     sender: Option<UnboundedSender<ListRequest<T>>>,
     #[allow(dead_code)]
@@ -91,23 +95,25 @@ where
 }
 
 impl<T> ItemAction<T>
-    where
-        T: ListItem {
-    fn handle<S>(self, state: &mut AsyncList<T, S>, index: usize)
+where
+    T: ListItem,
+{
+    fn handle<S>(self, state: &mut AsyncList<T, S>, index: usize, id: T::Id)
     where
         S: ListStorage<Item = T>,
     {
-        let item = state.items.get(index);
-        match (self, item) {
-            (ItemAction::Edit, Some(item)) => {
-                state.update_form = T::UpdateForm::from(item.clone());
-                state.editing = Some(index);
+        match self {
+            ItemAction::Edit => {
+                if let Some(item) = state.items.get(index) {
+                    state.update_form = T::UpdateForm::from(item.clone());
+                    state.editing = Some(id);
+                }
             }
-            (ItemAction::Update(update_output), Some(item)) => {
-                state.sender_send(ListRequest::Update(item.id(), update_output));
+            ItemAction::Update(update_output) => {
+                state.sender_send(ListRequest::Update(id, update_output));
             }
-            (ItemAction::Delete, Some(item)) => {
-                state.sender_send(ListRequest::Delete(item.id()));
+            ItemAction::Delete => {
+                state.sender_send(ListRequest::Delete(id));
             }
             _ => (),
         }
@@ -261,7 +267,11 @@ where
         }
     }
 
-    fn item_view(editing: bool, index: usize) -> impl WidgetView<Edit<Self>> + use<T, S> {
+    fn item_view(
+        editing: bool,
+        index: usize,
+        id: T::Id,
+    ) -> impl WidgetView<Edit<Self>> + use<T, S> {
         if editing {
             Either::A(map_action(
                 lens(
@@ -278,7 +288,7 @@ where
                     state.items.get(index).unwrap()
                 }),
                 move |state: &mut Self, action| {
-                    action.handle(state, index);
+                    action.handle(state, index, id);
                 },
             ))
         }
@@ -298,7 +308,10 @@ where
             .items
             .iter_mut()
             .enumerate()
-            .map(|(i, _)| Self::item_view(self.editing == Some(i), i))
+            .map(|(i, item)| {
+                let id = item.id();
+                Self::item_view(self.editing == Some(id), i, id)
+            })
             .collect::<Vec<_>>();
         fork(
             portal(
