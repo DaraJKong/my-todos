@@ -33,6 +33,16 @@ where
     ) -> impl Future<Output = Result<<Self::Item as ListItem>::Id, Self::Error>> + Send;
 }
 
+pub trait ListFilter
+where
+    Self: Sized + 'static,
+{
+    type Item: ListItem;
+
+    fn view(&mut self) -> impl WidgetView<Edit<Self>> + use<Self>;
+    fn filter(&self, item: &Self::Item) -> bool;
+}
+
 pub trait ListItem
 where
     Self: Sized + Clone + std::fmt::Debug + Send + 'static,
@@ -41,6 +51,7 @@ where
     type Id: PartialEq + Copy + std::fmt::Debug + Send + Sync;
     type CreateForm: Form<Output: Send>;
     type UpdateForm: Form<Output: Send> + From<Self>;
+    type Filter: ListFilter<Item = Self>;
 
     fn id(&self) -> Self::Id;
     fn view(&self) -> impl WidgetView<Read<Self>, ItemAction<Self>> + use<Self>;
@@ -87,6 +98,7 @@ where
 {
     create_form: T::CreateForm,
     update_form: T::UpdateForm,
+    filter: T::Filter,
     editing: Option<T::Id>,
     items: Vec<T>,
     sender: Option<UnboundedSender<ListRequest<T>>>,
@@ -268,11 +280,15 @@ where
     }
 
     fn item_view(
+        filter: bool,
         editing: bool,
         index: usize,
         id: T::Id,
-    ) -> impl WidgetView<Edit<Self>> + use<T, S> {
-        if editing {
+    ) -> Option<impl WidgetView<Edit<Self>> + use<T, S>> {
+        if !filter {
+            return None;
+        }
+        let either = if editing {
             Either::A(map_action(
                 lens(
                     <T::UpdateForm as Form>::view,
@@ -291,7 +307,8 @@ where
                     action.handle(state, index, id);
                 },
             ))
-        }
+        };
+        Some(either)
     }
 
     pub fn view(&mut self) -> impl WidgetView<Edit<Self>> + use<T, S> {
@@ -304,18 +321,24 @@ where
                 state.handle_create_submit(submit);
             },
         );
+        let filter_line = lens(
+            <T::Filter as ListFilter>::view,
+            move |state: &mut Self, ()| &mut state.filter,
+        );
         let items = self
             .items
             .iter_mut()
             .enumerate()
             .map(|(i, item)| {
                 let id = item.id();
-                Self::item_view(self.editing == Some(id), i, id)
+                let filter = self.filter.filter(item);
+                let editing = self.editing == Some(id);
+                Self::item_view(filter, editing, i, id)
             })
             .collect::<Vec<_>>();
         fork(
             portal(
-                flex_col((create_line, items))
+                flex_col((create_line, filter_line, items))
                     .width(Dim::Stretch)
                     .padding(15.),
             ),

@@ -19,12 +19,6 @@ enum TaskStatus {
     Available(Task),
 }
 
-enum Filter {
-    All,
-    Active,
-    Completed,
-}
-
 pub struct AppState {
     running: bool,
     main_window_id: WindowId,

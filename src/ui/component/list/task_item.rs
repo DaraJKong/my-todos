@@ -2,13 +2,16 @@ use thiserror::Error;
 use xilem::WidgetView;
 use xilem::core::{Edit, Read};
 use xilem::style::Style;
-use xilem::view::{FlexExt, button, checkbox, flex_col, flex_row, label, text_button, text_input};
+use xilem::view::{
+    FlexExt, MainAxisAlignment, button, checkbox, flex_col, flex_row, label, text_button,
+    text_input,
+};
 
 use crate::Task;
 use crate::database::{create_task, delete_task, get_tasks, update_task_done};
 use crate::ui::component::Form;
 use crate::ui::component::form::Submit;
-use crate::ui::component::list::{ItemAction, ListItem, ListStorage};
+use crate::ui::component::list::{ItemAction, ListFilter, ListItem, ListStorage};
 use crate::ui::theme::{DANGER_COLOR, SUCCESS_COLOR, SURFACE_BORDER_COLOR, SURFACE_COLOR};
 
 #[derive(Debug, Error)]
@@ -109,6 +112,39 @@ impl From<Task> for UpdateTaskForm {
     }
 }
 
+#[derive(Default, PartialEq, Clone, Copy)]
+pub enum TaskFilter {
+    All,
+    #[default]
+    Active,
+    Completed,
+}
+
+impl ListFilter for TaskFilter {
+    type Item = Task;
+
+    fn view(&mut self) -> impl WidgetView<Edit<Self>> + use<> {
+        let filter_task = |label, filter| {
+            checkbox::<_, Edit<Self>, _>(label, *self == filter, move |state: &mut Self, _| {
+                *state = filter
+            })
+        };
+        flex_row((
+            filter_task("All", Self::All),
+            filter_task("Active", Self::Active),
+            filter_task("Completed", Self::Completed),
+        ))
+        .main_axis_alignment(MainAxisAlignment::End)
+    }
+    fn filter(&self, task: &Task) -> bool {
+        match self {
+            Self::All => true,
+            Self::Active => !task.done,
+            Self::Completed => task.done,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct TaskStorage {
     last_error: Option<anyhow::Error>,
@@ -147,6 +183,7 @@ impl ListItem for Task {
     type Id = i64;
     type CreateForm = CreateTaskForm;
     type UpdateForm = UpdateTaskForm;
+    type Filter = TaskFilter;
 
     fn id(&self) -> i64 {
         self.id
