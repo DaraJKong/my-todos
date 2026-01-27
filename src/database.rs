@@ -6,6 +6,7 @@ use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
 use crate::Task;
+use crate::core::ServerError;
 
 pub static DB: LazyLock<SqlitePool> = LazyLock::new(|| {
     let db_connection_str =
@@ -18,8 +19,11 @@ pub static DB: LazyLock<SqlitePool> = LazyLock::new(|| {
         .expect("can't connect to database")
 });
 
-pub async fn get_tasks() -> anyhow::Result<Vec<Task>> {
+pub async fn get_tasks() -> Result<Vec<Task>, ServerError> {
     let pool = &*DB;
+
+    #[cfg(debug_assertions)]
+    std::thread::sleep(Duration::from_millis(500));
 
     let tasks = sqlx::query_as::<_, Task>("SELECT id, description, done FROM todos")
         .fetch_all(pool)
@@ -27,8 +31,11 @@ pub async fn get_tasks() -> anyhow::Result<Vec<Task>> {
     Ok(tasks)
 }
 
-pub async fn get_task(id: i64) -> anyhow::Result<Task> {
+pub async fn get_task(id: i64) -> Result<Task, ServerError> {
     let pool = &*DB;
+
+    #[cfg(debug_assertions)]
+    std::thread::sleep(Duration::from_millis(500));
 
     let task = sqlx::query_as::<_, Task>("SELECT id, description, done FROM todos WHERE id = ?")
         .bind(id)
@@ -37,8 +44,11 @@ pub async fn get_task(id: i64) -> anyhow::Result<Task> {
     Ok(task)
 }
 
-pub async fn create_task(desc: String) -> anyhow::Result<Task> {
+pub async fn create_task(desc: String) -> Result<Task, ServerError> {
     let pool = &*DB;
+
+    #[cfg(debug_assertions)]
+    std::thread::sleep(Duration::from_millis(500));
 
     let id = sqlx::query("INSERT INTO todos (description, done) VALUES (?, ?)")
         .bind(desc)
@@ -49,8 +59,11 @@ pub async fn create_task(desc: String) -> anyhow::Result<Task> {
     get_task(id).await
 }
 
-pub async fn update_task(id: i64, desc: String, done: bool) -> anyhow::Result<Task> {
+pub async fn update_task(id: i64, desc: String, done: bool) -> Result<Task, ServerError> {
     let pool = &*DB;
+
+    #[cfg(debug_assertions)]
+    std::thread::sleep(Duration::from_millis(500));
 
     sqlx::query("UPDATE todos SET description = ?, done = ? WHERE id = ?")
         .bind(desc)
@@ -61,8 +74,11 @@ pub async fn update_task(id: i64, desc: String, done: bool) -> anyhow::Result<Ta
     get_task(id).await
 }
 
-pub async fn delete_task(id: i64) -> anyhow::Result<i64> {
+pub async fn delete_task(id: i64) -> Result<i64, ServerError> {
     let pool = &*DB;
+
+    #[cfg(debug_assertions)]
+    std::thread::sleep(Duration::from_millis(500));
 
     sqlx::query("DELETE FROM todos WHERE id = ?")
         .bind(id)

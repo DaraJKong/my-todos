@@ -8,16 +8,11 @@ use xilem::{WindowId, WindowView, window};
 
 use crate::core::Task;
 use crate::ui::component::AsyncList;
-use crate::ui::component::list::task_item::TaskStorage;
+use crate::ui::task_list::TaskStorage;
 use crate::ui::theme::BACKGROUND_COLOR;
 
 pub mod core;
 pub mod database;
-
-enum TaskStatus {
-    Pending(i64),
-    Available(Task),
-}
 
 pub struct AppState {
     running: bool,

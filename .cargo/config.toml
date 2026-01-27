@@ -1,5 +1,5 @@
 [build]
-rustdocflags=["--default-theme=ayu"]
+rustdocflags = ["--default-theme=ayu"]
 
 [alias]
 rwin = "cargo run --release --target-dir D:\\CACHE\\todos\\target --target x86_64-pc-windows-gnu"
