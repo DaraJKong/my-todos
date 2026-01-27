@@ -1,9 +1,9 @@
 pub mod ui;
 
 use xilem::core::map_state;
-use xilem::masonry::layout::AsUnit;
+use xilem::masonry::layout::{AsUnit, Dim};
 use xilem::style::Style as _;
-use xilem::view::{FlexExt, MainAxisAlignment, flex_col, flex_row, sized_box};
+use xilem::view::{FlexExt, MainAxisAlignment, flex_col, flex_row, portal, sized_box};
 use xilem::{WindowId, WindowView, window};
 
 use crate::core::Task;
@@ -40,14 +40,16 @@ impl AppState {
     pub fn logic(&mut self) -> impl Iterator<Item = WindowView<AppState>> + use<> {
         let task_list = flex_row(sized_box(self.task_list.view()).width(1000.px()))
             .main_axis_alignment(MainAxisAlignment::Center)
-            .flex(1.);
+            .width(Dim::Stretch)
+            .padding(15.);
+        let portal = portal(task_list).flex(1.);
         let error = self.task_list.error_view().map(|error_view| {
             flex_row(error_view)
                 .main_axis_alignment(MainAxisAlignment::Center)
                 .padding(15.)
         });
         let content = map_state(
-            flex_col((task_list, error)).gap(0.px()),
+            flex_col((portal, error)).gap(0.px()),
             |state: &mut AppState, ()| &mut state.task_list,
         );
         std::iter::once(
