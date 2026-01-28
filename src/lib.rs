@@ -25,7 +25,7 @@ impl Default for AppState {
         Self {
             running: true,
             main_window_id: WindowId::next(),
-            task_list: Default::default(),
+            task_list: AsyncList::new(true, true),
         }
     }
 }
