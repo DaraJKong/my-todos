@@ -51,6 +51,7 @@ impl Form for CreateTaskForm {
                 Submit::No
             },
         )
+        .on_enter(|_, _| Submit::Yes)
         .placeholder("What needs to be done?");
         let add_button = text_button("Add task", |_| Submit::Yes);
         let error = self.error_view();
