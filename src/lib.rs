@@ -6,7 +6,7 @@ use xilem::style::Style as _;
 use xilem::view::{FlexExt, MainAxisAlignment, flex_col, flex_row, portal, sized_box};
 use xilem::{WindowId, WindowView, window};
 
-use crate::core::Task;
+use crate::core::{Priority, Status, Task};
 use crate::ui::component::AsyncList;
 use crate::ui::task_list::TaskStorage;
 use crate::ui::theme::BACKGROUND_COLOR;

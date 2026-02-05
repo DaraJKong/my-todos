@@ -1,0 +1,10 @@
+ALTER TABLE todos ADD COLUMN done INTEGER NOT NULL DEFAULT 0;
+
+UPDATE todos
+SET done = CASE
+    WHEN status == 2 THEN TRUE
+    ELSE FALSE
+END;
+
+ALTER TABLE todos DROP COLUMN status;
+ALTER TABLE todos DROP COLUMN priority;
